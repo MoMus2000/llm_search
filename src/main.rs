@@ -1,8 +1,10 @@
 mod llm;
 mod finance;
+mod helper;
 
 use clap::{Parser, Subcommand};
 use finance::Finance;
+use helper::serve_files;
 
 type GenericError = Box<dyn std::error::Error>;
 
@@ -47,6 +49,8 @@ enum Commands {
         ticker: String,
         #[clap(long, help = "Optional model to use for the context")]
         model: Option<String>,
+        #[clap(long, help = "Optional model to use for the context")]
+        serve: bool
     }
 
 }
@@ -107,7 +111,7 @@ fn main() -> Result<(), GenericError>{
                 llm.context_prompt(20, model)?;
             }
         }
-        Some(Commands::Finance {model, ticker}) => {
+        Some(Commands::Finance {model, ticker, serve}) => {
             let model = match model{
                 Some(model_str) => {
                     match model_str.as_str(){
@@ -125,6 +129,10 @@ fn main() -> Result<(), GenericError>{
             llm.model = Some(model);
             let mut fin = Finance::new(ticker.to_string(), llm);
             fin.run()?;
+
+            if *serve {
+                serve_files(&format!("/Users/mmuhammad/Documents/financials/{}/analysis", ticker));
+            }
 
         }
         None => {}

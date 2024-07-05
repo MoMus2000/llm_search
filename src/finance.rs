@@ -1,7 +1,9 @@
-use crate::{llm::LLM, llm::Model, GenericError};
+use crate::{helper::ToDocument, llm::{Model, LLM}, GenericError};
 use std::{io::{self, Write}, path::Path, thread::sleep, time::Duration};
 use std::fs::File;
 use std::io::Read;
+use indicatif::{ProgressBar, ProgressStyle};
+
 
 #[derive(Clone)]
 pub struct Finance{
@@ -27,9 +29,10 @@ impl Finance{
         - Always focus on the key points in my questions to determine my intent.
         - Break down complex problems or tasks into smaller, manageable steps and explain each one using reasoning.
         - If a mistake is made in a previous response, recognize and correct it.
-        - He Never mentions that he's giving an answer for eg heres a summary etc.
-        - Mustafa tries to phrase his answers as a concise report.
-        - He does not address anyone in his answer, instead writes his answers as a report.
+        - He Never mentions that he's giving an answer for eg using the phrase heres a summary, or here you go and things similar to that nature.
+        - Mustafa does not assume that his clients know financial jargon, therefore he tries to explain all financial concepts when creating his report.
+        - Mustafa has his output structured in HTML, with human readable formatting for the output using CSS.
+        - Mustafa is mindful of figures, million or billion that he mentions in his report.
         "#.trim().to_string());
 
         let mut input = String::new();
@@ -62,15 +65,11 @@ impl Finance{
         io::stdin().read_line(&mut input)
             .expect("Failed to read line");
 
-        println!("Enter the path to your financials: ");
+        let statement_file = "/Users/mmuhammad/Documents/financials/";
 
-        io::stdout().flush().unwrap(); // Flush the stdout buffer to ensure the prompt is printed
-        io::stdin().read_line(&mut input)
-            .expect("Failed to read line");
+        let statement_file = format!("{}{}",statement_file,self.ticker);
 
-        let statement_file = input.trim();
-
-        self.aggregate_data(statement_file)?;
+        self.aggregate_data(&statement_file)?;
 
         Ok(())
     }
@@ -82,9 +81,11 @@ impl Finance{
         let file = std::fs::read_to_string(file)?;
 
         let prompt = format!(r#"
-        I want you analyze the provided income statement in detail, quoting your figures for the stock ticker {}
-        The income statement is as follows: {}
-        Make a one page executive summary of your findings.
+        - I want you analyze the provided income statement in detail for the stock ticker {}
+        - I want to break information down by both annual and quarter.
+        - The income statement is as follows: {}
+        - Make a detailed report of your findings.
+        - The output should be in HTML.
         "#, self.ticker, file);
 
         let output = self.llm.prompt(Some(prompt.trim().to_string()), Model::LLMA70b, false)?;
@@ -98,9 +99,11 @@ impl Finance{
         let file = std::fs::read_to_string(file)?;
 
         let prompt = format!(r#"
-        I want you analyze the provided cashflow statement in detail, quoting your figures for the stock ticker {}
-        The cashflow statement is as follows: {}
-        Make a one page executive summary of your findings.
+        - I want you analyze the provided cash flow statement in detail for the stock ticker {}
+        - I want to break information down by both annual and quarter.
+        - The cash flow statement is as follows: {}
+        - Make a detailed report of your findings.
+        - The output should be in HTML.
         "#, self.ticker, file);
 
         let output = self.llm.prompt(Some(prompt.trim().to_string()), Model::LLMA70b, false)?;
@@ -114,9 +117,11 @@ impl Finance{
         let file = std::fs::read_to_string(file)?;
 
         let prompt = format!(r#"
-        I want you analyze the provided balance sheet statement in detail, quoting your figures for the stock ticker {}
-        The balance sheet statement is as follows: {}
-        Make a one page executive summary of your findings.
+        - I want you analyze the provided balance sheet statement in detail for the stock ticker {}
+        - I want to break information down by both annual and quarter.
+        - The balance sheet statement is as follows: {}
+        - Make a detailed report of your findings.
+        - The output should be in HTML.
         "#, self.ticker, file);
 
         let output = self.llm.prompt(Some(prompt.trim().to_string()), Model::LLMA70b, false)?;
@@ -126,8 +131,6 @@ impl Finance{
 
     fn read_reports(&self, mut path: String) -> Result<Vec<String>, GenericError>{
         use poppler::Document;
-
-        let mut summarized_file = path.clone();
 
         let mut content = Vec::new();
 
@@ -148,59 +151,48 @@ impl Finance{
         }).unwrap();
     
         let n = pdf.n_pages();
+        let bar = ProgressBar::new(n as u64);
+        bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
+        .unwrap()
+        .progress_chars("##-"));
         for i in 0..n {
             let page = pdf.page(i).expect(&format!("{i} is within the bounds of the range of the page"));
             if let Some(content) = page.text() {
                 let prompt = format!(r#"
-                You are being given information page by page.
-                For each page, give a summary as short as possible to conserve token count and space.
-                If you feel the information is redundant,feel free to ignore. I want the information summarized in
-                less than 100 words.
+                You are being given investment information page by page.
+                For each page, give a brief summary (<= 75 words) that only covers the main points on the page.
                 I want to scan mainly for company related risks, issues and boons.
-                If the page is not either of these things, do not return any response.
+                If the page is not either of these things, you do not need to output anything.
+                If you feel the information is redundant, ignore it.
                 page number {} => {}
+                I want the report to be in html with Css styling optimized for human readibility.
                 "#, i, content.to_string());
                 let model = self.llm.clone().model.unwrap();
                 let output = self.llm.prompt(Some(prompt.trim().to_string()), model, false)?;
                 summaries.push(output);
             }
-            println!("");
-            sleep(Duration::from_secs(10));
+            sleep(Duration::from_secs(30));
+            bar.inc(1);
         }
 
-
-        summarized_file.push_str("/summarized_files.txt");
-
-        let mut file = File::create(summarized_file)?;
-
-        for line in &summaries{
-            writeln!(file, "{}", line)?;
-        }
-
+        bar.finish();
         Ok(summaries)
+
     }
 
     fn aggregate_data(&mut self, statement_file : &str) -> Result<(), GenericError>{
+
+        println!("Reading income statement ..");
         let income_analysis = self.read_income_statements(statement_file.to_string())?;
+        income_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "income_analysis.html"))?;
         sleep(Duration::from_secs(30));
-        let cash_flow_ananlysis = self.read_cash_flow_statement(statement_file.to_string())?;
+        println!("Reading cash flow statement ..");
+        let cash_flow_analysis = self.read_cash_flow_statement(statement_file.to_string())?;
+        cash_flow_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "cash_flow_analysis.html"))?;
         sleep(Duration::from_secs(30));
+        println!("Reading balance sheet statement ..");
         let balance_sheet_analyis = self.read_balance_sheet(statement_file.to_string())?;
-        sleep(Duration::from_secs(30));
-        let annual_statement = self.read_reports(statement_file.to_string())?;
-
-        let prompt = format!(r#"
-        I want you this analysis for the income statement {}
-        the cash flow statement {}
-        and the balance_sheet {}
-        to now generate a comprehensive summary on the company, and present a use case
-        for investing into the company.
-
-        Annual statements {:?}
-        "#, income_analysis, cash_flow_ananlysis, balance_sheet_analyis, annual_statement);
-
-        
-        let final_result = self.llm.prompt(Some(prompt.trim().to_string()), Model::LLMA8b, true)?;
+        balance_sheet_analyis.write_to_file(&format!("{}/analysis/{}", statement_file, "balance_sheet_analysis.html"))?;
 
         Ok(())
     }

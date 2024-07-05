@@ -107,7 +107,7 @@ impl LLM {
 
             message = response.choices.get(0).expect("").message.content.to_string();
 
-            let delay = Duration::from_millis(5); // Adjust the delay as needed
+            let delay = Duration::from_millis(15); // Adjust the delay as needed
 
             for char in message.chars() {
                 print!("\x1b[38;2;255;100;0m{}\x1b[0m", char); // Orange color
