@@ -6,6 +6,22 @@ pub trait ToDocument {
     fn write_to_file(&self, file_name: &str) -> Result<(), GenericError>;
 }
 
+pub trait ToString{
+    fn to_string(&self) -> Result<String, GenericError>;
+}
+
+impl ToString for Vec<String>{
+    fn to_string(&self) -> Result<String, GenericError> {
+        let mut summaries = String::new();
+
+        for summary in self{
+            summaries.push_str(&summary);
+        }
+
+        Ok(summaries)
+    }
+}
+
 impl ToDocument for Vec<String> {
     fn write_to_file(&self, file_name: &str) -> Result<(), GenericError> {
         let mut file = File::create(file_name)?;

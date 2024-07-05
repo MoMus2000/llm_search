@@ -1,5 +1,5 @@
-use crate::{helper::ToDocument, llm::{Model, LLM}, GenericError};
-use std::{io::{self, Write}, path::Path, thread::sleep, time::Duration};
+use crate::{helper::{ToDocument, ToString}, llm::{Model, LLM}, GenericError};
+use std::{io::{self, Write}, path::Path, process::Output, thread::sleep, time::Duration};
 use std::fs::File;
 use std::io::Read;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -129,7 +129,7 @@ impl Finance{
         Ok(output)
     }
 
-    fn read_reports(&self, mut path: String) -> Result<Vec<String>, GenericError>{
+    fn read_reports_for_issues(&self, mut path: String) -> Result<String, GenericError>{
         use poppler::Document;
 
         let mut content = Vec::new();
@@ -151,48 +151,60 @@ impl Finance{
         }).unwrap();
     
         let n = pdf.n_pages();
-        let bar = ProgressBar::new(n as u64);
-        bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
-        .unwrap()
-        .progress_chars("##-"));
         for i in 0..n {
             let page = pdf.page(i).expect(&format!("{i} is within the bounds of the range of the page"));
             if let Some(content) = page.text() {
                 let prompt = format!(r#"
-                You are being given investment information page by page.
-                For each page, give a brief summary (<= 75 words) that only covers the main points on the page.
-                I want to scan mainly for company related risks, issues and boons.
-                If the page is not either of these things, you do not need to output anything.
-                If you feel the information is redundant, ignore it.
-                page number {} => {}
-                I want the report to be in html with Css styling optimized for human readibility.
+                - You are being given investment information page by page.
+                - I want you to scan the issues that the company may face and record them.
+                - I want you provide your analysis.
+                - Keep it brief (<= 50 words)
+                - I just want the spark notes, no analysis from yourself.
+                - It is imperitative to follow this format:
+                **PAGE NUMBER: **
+                **REPORT: **
+                - current page number {} => {}
                 "#, i, content.to_string());
-                let model = self.llm.clone().model.unwrap();
-                let output = self.llm.prompt(Some(prompt.trim().to_string()), model, false)?;
+                let model = Model::LLMA70b;
+                let output = self.llm.prompt(Some(prompt.trim().to_string()), model, true)?;
                 summaries.push(output);
+                println!("");
             }
             sleep(Duration::from_secs(30));
-            bar.inc(1);
         }
 
-        bar.finish();
-        Ok(summaries)
+        let summaries_string = summaries.to_string().unwrap();
+
+        println!("{}", summaries_string);
+
+        let prompt = format!(r#"
+        - Prepare an executive report from the information being given to you.
+        information: {}
+        "#, summaries_string);
+
+        let model = Model::LLMA8b;
+        let output = self.llm.prompt(Some(prompt.trim().to_string()), model, false)?;
+
+        Ok(output)
 
     }
 
     fn aggregate_data(&mut self, statement_file : &str) -> Result<(), GenericError>{
 
-        println!("Reading income statement ..");
-        let income_analysis = self.read_income_statements(statement_file.to_string())?;
-        income_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "income_analysis.html"))?;
-        sleep(Duration::from_secs(30));
-        println!("Reading cash flow statement ..");
-        let cash_flow_analysis = self.read_cash_flow_statement(statement_file.to_string())?;
-        cash_flow_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "cash_flow_analysis.html"))?;
-        sleep(Duration::from_secs(30));
-        println!("Reading balance sheet statement ..");
-        let balance_sheet_analyis = self.read_balance_sheet(statement_file.to_string())?;
-        balance_sheet_analyis.write_to_file(&format!("{}/analysis/{}", statement_file, "balance_sheet_analysis.html"))?;
+        // println!("Reading income statement ..");
+        // let income_analysis = self.read_income_statements(statement_file.to_string())?;
+        // income_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "income_analysis.html"))?;
+        // sleep(Duration::from_secs(30));
+        // println!("Reading cash flow statement ..");
+        // let cash_flow_analysis = self.read_cash_flow_statement(statement_file.to_string())?;
+        // cash_flow_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "cash_flow_analysis.html"))?;
+        // sleep(Duration::from_secs(30));
+        // println!("Reading balance sheet statement ..");
+        // let balance_sheet_analyis = self.read_balance_sheet(statement_file.to_string())?;
+        // balance_sheet_analyis.write_to_file(&format!("{}/analysis/{}", statement_file, "balance_sheet_analysis.html"))?;
+
+        let output = self.read_reports_for_issues(statement_file.to_string())?;
+        output.write_to_file(&format!("{}/analysis/{}", statement_file, "issues_report.html"))?;
 
         Ok(())
     }
