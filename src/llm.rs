@@ -7,10 +7,11 @@ use std::time::Duration;
 
 use crate::GenericError;
 
+#[derive(Clone)]
 pub struct LLM {
-    pub ticker: Option<String>,
     pub system: Option<String>,
     pub prompt: Option<String>,
+    pub model: Option<Model>
 }
 
 #[derive(Serialize, Debug)]
@@ -38,7 +39,7 @@ struct Message {
     content: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Model{
     LLMA8b,
     LLMA70b,
@@ -62,9 +63,9 @@ impl Into<String> for &Model {
 impl LLM {
     pub fn new() -> LLM {
         Self{
-            ticker: None,
             system: None,
-            prompt: None
+            prompt: None,
+            model: None
         }
     }
 
@@ -177,7 +178,7 @@ impl LLM {
 
     }
 
-    pub fn prompt(&self, query : Option<String>, model: Model) -> Result<(), GenericError>{
+    pub fn prompt(&self, query : Option<String>, model: Model, output: bool) -> Result<String, GenericError>{
         let groq_api_key = env::var_os("GROQ_API_KEY")
             .expect("Key Not Found")
             .into_string()
@@ -194,6 +195,12 @@ impl LLM {
         
         
         let mut vec : Vec<HashMap<String, String>>= Vec::new();
+
+        let mut system_map: HashMap<String, String> = HashMap::new();
+        system_map.insert("role".to_string(), "system".to_string());
+        let system = self.system.clone().unwrap().to_string();
+        system_map.insert("content".to_string(), system);
+        vec.push(system_map);
         
         vec.push(user_map);
 
@@ -217,8 +224,18 @@ impl LLM {
 
         let response : Choices = response.json()?;
 
-        println!("{}", response.choices.get(0).expect("Expected a response from the LLM").message.content);
-        
-        Ok(())
+        let message = response.choices.get(0).expect("").message.content.to_string();
+
+        let delay = Duration::from_millis(5); // Adjust the delay as needed
+
+        if output == true{
+            for char in message.chars() {
+                print!("\x1b[38;2;255;100;0m{}\x1b[0m", char); // Orange color
+                io::stdout().flush().unwrap(); // Flush stdout to ensure the character is printed immediately
+                sleep(delay);
+            }
+        }
+
+        Ok(message)
     }
 }

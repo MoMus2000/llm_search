@@ -1,5 +1,8 @@
 mod llm;
+mod finance;
+
 use clap::{Parser, Subcommand};
+use finance::Finance;
 
 type GenericError = Box<dyn std::error::Error>;
 
@@ -20,7 +23,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    #[clap(name = "query", about = "Send a single LLM query")]
+    #[clap(name = "query", about = "Send a single LLM query.")]
     Query {
         #[clap(long, help = "Singular prompt with no context")]
         prompt: String,
@@ -28,7 +31,7 @@ enum Commands {
         model: Option<String>
     },
 
-    #[clap(name = "context", about = "Open a context to query the LLM with history kept intact")]
+    #[clap(name = "context", about = "Open a context to query the LLM with history kept intact.")]
     Context {
         #[clap(long, help = "Decide the lookback window that gets used to preserve context")]
         look_back: Option<i32>,
@@ -37,6 +40,14 @@ enum Commands {
         #[clap(long, help = "Optional system prompt to decide how the LLM should respond")]
         system: Option<String>
     },
+
+    #[clap(name = "finance", about = "Perform a valuation for the stock in qs.")]
+    Finance{
+        #[clap(long, help = "Ticker symbol for the stock to value")]
+        ticker: String,
+        #[clap(long, help = "Optional model to use for the context")]
+        model: Option<String>,
+    }
 
 }
 
@@ -51,7 +62,7 @@ fn main() -> Result<(), GenericError>{
                 Some(model_str) => {
                     match model_str.as_str(){
                         "L8" => llm::Model::LLMA8b,
-                        "Lb" => llm::Model::LLMA70b,
+                        "L70" => llm::Model::LLMA70b,
                         "M" => llm::Model::MISTRAL,
                         "G7" => llm::Model::GEMMA7b,
                         "G9" => llm::Model::GEMMA9b,
@@ -62,7 +73,7 @@ fn main() -> Result<(), GenericError>{
             };
 
             if prompt.len() != 0{
-                llm.prompt(Some("".to_string()), model)?;
+                llm.prompt(Some("".to_string()), model, true)?;
             }
             else{
                 println!("No input provided, can't query the LLM");
@@ -72,11 +83,14 @@ fn main() -> Result<(), GenericError>{
             if system.is_some(){
                 llm.system = system.clone()
             }
+            else{
+                llm.system = Some(String::from("I want concise answers, do not give me large swath of text."))
+            }
             let model = match model{
                 Some(model_str) => {
                     match model_str.as_str(){
                         "L8" => llm::Model::LLMA8b,
-                        "Lb" => llm::Model::LLMA70b,
+                        "L70" => llm::Model::LLMA70b,
                         "M" => llm::Model::MISTRAL,
                         "G7" => llm::Model::GEMMA7b,
                         "G9" => llm::Model::GEMMA9b,
@@ -86,16 +100,32 @@ fn main() -> Result<(), GenericError>{
                 None => llm::Model::LLMA8b
             };
 
-            println!("Model set to {:?}", model);
-
             if look_back.is_some() && look_back.unwrap() >= 1{
-                println!("Enabling context with lookback set to {}", look_back.unwrap());
                 llm.context_prompt(look_back.unwrap() as usize, model)?;
             }
             else{
-                println!("Opening context lookback set to 20");
                 llm.context_prompt(20, model)?;
             }
+        }
+        Some(Commands::Finance {model, ticker}) => {
+            let model = match model{
+                Some(model_str) => {
+                    match model_str.as_str(){
+                        "L8" => llm::Model::LLMA8b,
+                        "L70" => llm::Model::LLMA70b,
+                        "M" => llm::Model::MISTRAL,
+                        "G7" => llm::Model::GEMMA7b,
+                        "G9" => llm::Model::GEMMA9b,
+                        _ => llm::Model::LLMA8b
+                    }
+                },
+                None => llm::Model::LLMA8b
+            };
+
+            llm.model = Some(model);
+            let mut fin = Finance::new(ticker.to_string(), llm);
+            fin.run()?;
+
         }
         None => {}
     }
