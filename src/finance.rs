@@ -31,7 +31,6 @@ impl Finance{
         - If a mistake is made in a previous response, recognize and correct it.
         - He Never mentions that he's giving an answer for eg using the phrase heres a summary, or here you go and things similar to that nature.
         - Mustafa does not assume that his clients know financial jargon, therefore he tries to explain all financial concepts when creating his report.
-        - Mustafa has his output structured in HTML, with human readable formatting for the output using CSS.
         - Mustafa is mindful of figures, million or billion that he mentions in his report.
         "#.trim().to_string());
 
@@ -56,6 +55,8 @@ impl Finance{
         income_statement.txt
         cash_flow_statement.txt
         balance_sheet.txt
+
+        reports/ (Can contain the annual and quaterly reports)
 
         And proceed forwards by pressing ENTER.
 
@@ -84,8 +85,9 @@ impl Finance{
         - I want you analyze the provided income statement in detail for the stock ticker {}
         - I want to break information down by both annual and quarter.
         - The income statement is as follows: {}
+        - Please write in paragraphs and use spaces to make things easier to read.
+        - It is imperative for each heading to be on a new line.
         - Make a detailed report of your findings.
-        - The output should be in HTML.
         "#, self.ticker, file);
 
         let output = self.llm.prompt(Some(prompt.trim().to_string()), Model::LLMA70b, false)?;
@@ -102,8 +104,9 @@ impl Finance{
         - I want you analyze the provided cash flow statement in detail for the stock ticker {}
         - I want to break information down by both annual and quarter.
         - The cash flow statement is as follows: {}
+        - Please write in paragraphs and use spaces to make things easier to read.
+        - It is imperative for each heading to be on a new line.
         - Make a detailed report of your findings.
-        - The output should be in HTML.
         "#, self.ticker, file);
 
         let output = self.llm.prompt(Some(prompt.trim().to_string()), Model::LLMA70b, false)?;
@@ -120,8 +123,9 @@ impl Finance{
         - I want you analyze the provided balance sheet statement in detail for the stock ticker {}
         - I want to break information down by both annual and quarter.
         - The balance sheet statement is as follows: {}
+        - Please write in paragraphs and use spaces to make things easier to read.
+        - It is imperative for each heading to be on a new line.
         - Make a detailed report of your findings.
-        - The output should be in HTML.
         "#, self.ticker, file);
 
         let output = self.llm.prompt(Some(prompt.trim().to_string()), Model::LLMA70b, false)?;
@@ -129,7 +133,7 @@ impl Finance{
         Ok(output)
     }
 
-    fn read_reports_for_issues(&self, mut path: String) -> Result<String, GenericError>{
+    fn read_report(&self, mut path: String) -> Result<String, GenericError>{
         use poppler::Document;
 
         let mut content = Vec::new();
@@ -156,10 +160,8 @@ impl Finance{
             if let Some(content) = page.text() {
                 let prompt = format!(r#"
                 - You are being given investment information page by page.
-                - I want you to scan the issues that the company may face and record them.
-                - I want you provide your analysis.
-                - Keep it brief (<= 50 words)
-                - I just want the spark notes, no analysis from yourself.
+                - I want you to scan through the information.
+                - I want you explain whats being said on the page and summarize it into something easily digestable for someone that is not financially literate or savvy.
                 - It is imperitative to follow this format:
                 **PAGE NUMBER: **
                 **REPORT: **
@@ -171,40 +173,87 @@ impl Finance{
                 println!("");
             }
             sleep(Duration::from_secs(30));
+            let summary_path = format!("/Users/mmuhammad/Documents/financials/{}/analysis/summaries.txt", self.ticker);
+            let summaries_string = summaries.to_string()?;
+            summaries_string.write_to_file(&summary_path)?;
         }
 
-        let summaries_string = summaries.to_string().unwrap();
+        let summaries_string = summaries.to_string()?;
 
-        println!("{}", summaries_string);
+        // let mut summaries_string = String::new();
 
-        let prompt = format!(r#"
-        - Prepare an executive report from the information being given to you.
-        information: {}
-        "#, summaries_string);
+        // File::open(summary_path)?.read_to_string(&mut summaries_string)?;
 
-        let model = Model::LLMA8b;
-        let output = self.llm.prompt(Some(prompt.trim().to_string()), model, false)?;
+        // use std::collections::HashSet;
 
-        Ok(output)
+        // let stop_words: HashSet<&str> = vec![
+        // "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "he", "in", "is", 
+        // "it", "its", "of", "on", "that", "the", "to", "was", "were", "will", "with"
+        // ].into_iter().collect();
+
+        // let summaries_string = summaries_string 
+        // .lines()
+        // .filter(|line| !line.trim().is_empty())
+        // .filter(|line| !line.contains("PAGE"))
+        // .collect::<Vec<&str>>()
+        // .join("\n");
+
+        // let summaries_string = summaries_string
+        // .split_whitespace()
+        // .filter(|word| !stop_words.contains(*word))
+        // .collect::<Vec<&str>>()
+        // .join(" ");
+
+        // let summaries_string : String = summaries_string
+        // .chars()
+        // .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        // .collect();
+
+        // let prompt = format!(r#"
+        // - I am providing the information for a company here : {}
+        // - I want an extensive analysis, highlighting, but not limited to issues, boons and tailwinds.
+        // - I do not want you skip over any of the important points, I want you touch on all important things.
+        // - When giving response, I expect detailed responses, that quote from the text or explain it in detail.
+        // - For each issue or boon that is mentioned, I expect an accompanying reason as to why that is the case.
+        // - I want you to identify past issues.
+        // - I want you to identify future issues.
+        // - I want you to identify some tailwinds.
+        // - I want you to identify legal issues.
+        // - I want you to identify regulatory issues.
+        // - I want you to identify boons.
+        // - I want you to identify macro economic issues.
+        // - I want you to comment on the future outlook.
+        // - I want you to identify issues and boons with revenue, profitablity and expenses.
+        // - I want you to comment on current macro economic trends.
+        // - I want you to identify and comment on competition faced by the company.
+        // - I want you to identify and comment on what the company looks like in the future.
+        // - Please write in paragraphs and use spaces to make things easier to read.
+        // - It is imperative for each heading to be on a new line.
+        // "#, summaries_string.trim());
+
+        // let model = Model::LLMA8b;
+        // let output = self.llm.prompt(Some(prompt.trim().to_string()), model, false)?;
+
+        Ok(summaries_string)
 
     }
 
     fn aggregate_data(&mut self, statement_file : &str) -> Result<(), GenericError>{
 
-        // println!("Reading income statement ..");
-        // let income_analysis = self.read_income_statements(statement_file.to_string())?;
-        // income_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "income_analysis.html"))?;
-        // sleep(Duration::from_secs(30));
-        // println!("Reading cash flow statement ..");
-        // let cash_flow_analysis = self.read_cash_flow_statement(statement_file.to_string())?;
-        // cash_flow_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "cash_flow_analysis.html"))?;
-        // sleep(Duration::from_secs(30));
-        // println!("Reading balance sheet statement ..");
-        // let balance_sheet_analyis = self.read_balance_sheet(statement_file.to_string())?;
-        // balance_sheet_analyis.write_to_file(&format!("{}/analysis/{}", statement_file, "balance_sheet_analysis.html"))?;
-
-        let output = self.read_reports_for_issues(statement_file.to_string())?;
-        output.write_to_file(&format!("{}/analysis/{}", statement_file, "issues_report.html"))?;
+        println!("Reading income statement ..");
+        let income_analysis = self.read_income_statements(statement_file.to_string())?;
+        income_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "income_analysis.txt"))?;
+        sleep(Duration::from_secs(30));
+        println!("Reading cash flow statement ..");
+        let cash_flow_analysis = self.read_cash_flow_statement(statement_file.to_string())?;
+        cash_flow_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "cash_flow_analysis.txt"))?;
+        sleep(Duration::from_secs(30));
+        println!("Reading balance sheet statement ..");
+        let balance_sheet_analyis = self.read_balance_sheet(statement_file.to_string())?;
+        balance_sheet_analyis.write_to_file(&format!("{}/analysis/{}", statement_file, "balance_sheet_analysis.txt"))?;
+        println!("Reading Reports ..");
+        let output = self.read_report(statement_file.to_string())?;
+        output.write_to_file(&format!("{}/analysis/{}", statement_file, "issues_report.txt"))?;
 
         Ok(())
     }

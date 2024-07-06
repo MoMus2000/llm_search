@@ -17,7 +17,8 @@ pub struct LLM {
 #[derive(Serialize, Debug)]
 struct Payload{
     messages: Vec<HashMap<String, String>>,
-    model: String
+    model: String,
+    max_tokens: i32
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -173,7 +174,8 @@ impl LLM {
 
         Payload{
             model: model_str,
-            messages: result_vec
+            messages: result_vec,
+            max_tokens: 8192
         }
 
     }
@@ -213,7 +215,8 @@ impl LLM {
 
         let body = Payload{
             model: model_str,
-            messages: vec
+            messages: vec,
+            max_tokens: 8192
         };
 
         let response = request.post(url)
@@ -234,6 +237,7 @@ impl LLM {
                 io::stdout().flush().unwrap(); // Flush stdout to ensure the character is printed immediately
                 sleep(delay);
             }
+            println!();
         }
 
         Ok(message)

@@ -51,6 +51,11 @@ enum Commands {
         model: Option<String>,
         #[clap(long, help = "Optional model to use for the context")]
         serve: bool
+    },
+
+    #[clap(name = "make_ticker", about = "Generate a folder with required files and folders.")]
+    MakeTicker{
+        ticker: String
     }
 
 }
@@ -135,6 +140,34 @@ fn main() -> Result<(), GenericError>{
             }
 
         }
+        Some(Commands::MakeTicker {ticker}) => {
+            let path = format!("/Users/mmuhammad/Documents/financials/{}",ticker);
+
+            if !std::path::Path::new(&path).exists() {
+                std::fs::create_dir(&path)?;
+            }
+            std::fs::File::create(format!("{}/income_statement.txt",path))?;
+            std::fs::File::create(format!("{}/balance_sheet_statement.txt",path))?;
+            std::fs::File::create(format!("{}/cash_flow_statement.txt",path))?;
+
+            let mut reports = path.clone();
+
+            reports.push_str("/reports");
+
+            if !std::path::Path::new(&reports).exists() {
+                std::fs::create_dir(&reports)?;
+            }
+
+            let mut analysis = path.clone();
+
+            analysis.push_str("/analysis");
+
+            if !std::path::Path::new(&analysis).exists() {
+                std::fs::create_dir(&analysis)?;
+            }
+
+        }
+
         None => {}
     }
 
