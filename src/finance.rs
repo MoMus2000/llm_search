@@ -1,7 +1,8 @@
 use crate::{helper::{ToDocument, ToString}, llm::{Model, LLM}, GenericError};
-use std::{io::{self, Write}, path::Path, process::Output, thread::sleep, time::Duration};
+use std::{fmt::format, io::{self, Write}, path::Path, process::Output, thread::sleep, time::Duration};
 use std::fs::File;
 use std::io::Read;
+use clap::Error;
 use indicatif::{ProgressBar, ProgressStyle};
 
 
@@ -106,6 +107,7 @@ impl Finance{
         - The cash flow statement is as follows: {}
         - Please write in paragraphs and use spaces to make things easier to read.
         - It is imperative for each heading to be on a new line.
+        - It is imperative for you to respect and avoid tampering with financial figures. It is imperitive to not interchange millions and billions, and substitute a comma with a period and so on.
         - Make a detailed report of your findings.
         "#, self.ticker, file);
 
@@ -140,19 +142,19 @@ impl Finance{
 
         let mut summaries: Vec<String> = Vec::new();
 
-        path.push_str("/reports/2023.pdf");
-
         let path : &Path = Path::new(&path);
-    
+
         File::open(path)
             .and_then(|mut file| file.read_to_end(&mut content))
-            .map_err(|_| {
-                eprintln!("ERROR: could not read file");
-            }).unwrap();
+            .map_err(|e| {
+                eprintln!("ERROR: could not read file {}", e);
+                Box::new(e) as Box<dyn std::error::Error>
+            })?;
     
-        let pdf = Document::from_data(&content, None).map_err(|_| {
-            eprintln!("ERROR: could not read file")
-        }).unwrap();
+        let pdf = Document::from_data(&content, None).map_err(|e| {
+            eprintln!("ERROR: could not read file");
+            Box::new(e) as Box<dyn std::error::Error>
+        })?;
     
         let n = pdf.n_pages();
         for i in 0..n {
@@ -162,13 +164,23 @@ impl Finance{
                 - You are being given investment information page by page.
                 - I want you to scan through the information.
                 - I want you explain whats being said on the page and summarize it into something easily digestable for someone that is not financially literate or savvy.
+                - It is imperative for you to respect and avoid tampering with financial figures. It is imperitive to not interchange millions and billions, and substitute a comma with a period and so on.
                 - It is imperitative to follow this format:
                 **PAGE NUMBER: **
                 **REPORT: **
                 - current page number {} => {}
                 "#, i, content.to_string());
                 let model = Model::LLMA70b;
-                let output = self.llm.prompt(Some(prompt.trim().to_string()), model, true)?;
+                let output = self.llm.prompt(Some(prompt.trim().to_string()), model, true);
+                let output = match output{
+                    Ok(res) => res,
+                    Err(_) => {
+                        println!("ERROR: Rerun prompt .. {}", i);
+                        sleep(Duration::from_secs(120));
+                        let model = Model::LLMA70b;
+                        self.llm.prompt(Some(prompt.trim().to_string()), model, true).unwrap()
+                    }
+                };
                 summaries.push(output);
                 println!("");
             }
@@ -180,82 +192,41 @@ impl Finance{
 
         let summaries_string = summaries.to_string()?;
 
-        // let mut summaries_string = String::new();
-
-        // File::open(summary_path)?.read_to_string(&mut summaries_string)?;
-
-        // use std::collections::HashSet;
-
-        // let stop_words: HashSet<&str> = vec![
-        // "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "he", "in", "is", 
-        // "it", "its", "of", "on", "that", "the", "to", "was", "were", "will", "with"
-        // ].into_iter().collect();
-
-        // let summaries_string = summaries_string 
-        // .lines()
-        // .filter(|line| !line.trim().is_empty())
-        // .filter(|line| !line.contains("PAGE"))
-        // .collect::<Vec<&str>>()
-        // .join("\n");
-
-        // let summaries_string = summaries_string
-        // .split_whitespace()
-        // .filter(|word| !stop_words.contains(*word))
-        // .collect::<Vec<&str>>()
-        // .join(" ");
-
-        // let summaries_string : String = summaries_string
-        // .chars()
-        // .filter(|c| c.is_alphanumeric() || c.is_whitespace())
-        // .collect();
-
-        // let prompt = format!(r#"
-        // - I am providing the information for a company here : {}
-        // - I want an extensive analysis, highlighting, but not limited to issues, boons and tailwinds.
-        // - I do not want you skip over any of the important points, I want you touch on all important things.
-        // - When giving response, I expect detailed responses, that quote from the text or explain it in detail.
-        // - For each issue or boon that is mentioned, I expect an accompanying reason as to why that is the case.
-        // - I want you to identify past issues.
-        // - I want you to identify future issues.
-        // - I want you to identify some tailwinds.
-        // - I want you to identify legal issues.
-        // - I want you to identify regulatory issues.
-        // - I want you to identify boons.
-        // - I want you to identify macro economic issues.
-        // - I want you to comment on the future outlook.
-        // - I want you to identify issues and boons with revenue, profitablity and expenses.
-        // - I want you to comment on current macro economic trends.
-        // - I want you to identify and comment on competition faced by the company.
-        // - I want you to identify and comment on what the company looks like in the future.
-        // - Please write in paragraphs and use spaces to make things easier to read.
-        // - It is imperative for each heading to be on a new line.
-        // "#, summaries_string.trim());
-
-        // let model = Model::LLMA8b;
-        // let output = self.llm.prompt(Some(prompt.trim().to_string()), model, false)?;
-
         Ok(summaries_string)
 
     }
 
     fn aggregate_data(&mut self, statement_file : &str) -> Result<(), GenericError>{
 
-        println!("Reading income statement ..");
-        let income_analysis = self.read_income_statements(statement_file.to_string())?;
-        income_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "income_analysis.txt"))?;
-        sleep(Duration::from_secs(30));
-        println!("Reading cash flow statement ..");
-        let cash_flow_analysis = self.read_cash_flow_statement(statement_file.to_string())?;
-        cash_flow_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "cash_flow_analysis.txt"))?;
-        sleep(Duration::from_secs(30));
-        println!("Reading balance sheet statement ..");
-        let balance_sheet_analyis = self.read_balance_sheet(statement_file.to_string())?;
-        balance_sheet_analyis.write_to_file(&format!("{}/analysis/{}", statement_file, "balance_sheet_analysis.txt"))?;
-        println!("Reading Reports ..");
-        let output = self.read_report(statement_file.to_string())?;
-        output.write_to_file(&format!("{}/analysis/{}", statement_file, "issues_report.txt"))?;
+        // println!("Reading income statement ..");
+        // let income_analysis = self.read_income_statements(statement_file.to_string())?;
+        // income_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "income_analysis.txt"))?;
+        // sleep(Duration::from_secs(30));
+        // println!("Reading cash flow statement ..");
+        // let cash_flow_analysis = self.read_cash_flow_statement(statement_file.to_string())?;
+        // cash_flow_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "cash_flow_analysis.txt"))?;
+        // sleep(Duration::from_secs(30));
+        // println!("Reading balance sheet statement ..");
+        // let balance_sheet_analyis = self.read_balance_sheet(statement_file.to_string())?;
+        // balance_sheet_analyis.write_to_file(&format!("{}/analysis/{}", statement_file, "balance_sheet_analysis.txt"))?;
+        // println!("Reading Reports ..");
+
+        let reports= std::fs::read_dir(format!("/Users/mmuhammad/Documents/financials/{}/reports", self.ticker))?;
+
+        for report in reports{
+            let report_name = format!("{}", report.unwrap().file_name().to_str().unwrap());
+            let report_path = format!("/Users/mmuhammad/Documents/financials/{}/reports/{}", self.ticker, report_name);
+            let output = match self.read_report(report_path){
+                Ok(output) => output,
+                Err(_) => {
+                    continue
+                }
+            };
+            output.write_to_file(&format!("{}/analysis/{}", statement_file, report_name))?;
+        }
 
         Ok(())
+
     }
 
 }
