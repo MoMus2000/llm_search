@@ -1,9 +1,7 @@
 use crate::{helper::{ToDocument, ToString}, llm::{Model, LLM}, GenericError};
-use std::{fmt::format, io::{self, Write}, path::Path, process::Output, thread::sleep, time::Duration};
+use std::{io::{self, Write}, path::Path, thread::sleep, time::Duration};
 use std::fs::File;
 use std::io::Read;
-use clap::Error;
-use indicatif::{ProgressBar, ProgressStyle};
 
 
 #[derive(Clone)]
@@ -135,7 +133,7 @@ impl Finance{
         Ok(output)
     }
 
-    fn read_report(&self, mut path: String) -> Result<String, GenericError>{
+    fn read_report(&self, path: String) -> Result<String, GenericError>{
         use poppler::Document;
 
         let mut content = Vec::new();
@@ -184,7 +182,7 @@ impl Finance{
                 summaries.push(output);
                 println!("");
             }
-            sleep(Duration::from_secs(30));
+            sleep(Duration::from_secs(15));
             let summary_path = format!("/Users/mmuhammad/Documents/financials/{}/analysis/summaries.txt", self.ticker);
             let summaries_string = summaries.to_string()?;
             summaries_string.write_to_file(&summary_path)?;
@@ -198,18 +196,18 @@ impl Finance{
 
     fn aggregate_data(&mut self, statement_file : &str) -> Result<(), GenericError>{
 
-        // println!("Reading income statement ..");
-        // let income_analysis = self.read_income_statements(statement_file.to_string())?;
-        // income_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "income_analysis.txt"))?;
-        // sleep(Duration::from_secs(30));
-        // println!("Reading cash flow statement ..");
-        // let cash_flow_analysis = self.read_cash_flow_statement(statement_file.to_string())?;
-        // cash_flow_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "cash_flow_analysis.txt"))?;
-        // sleep(Duration::from_secs(30));
-        // println!("Reading balance sheet statement ..");
-        // let balance_sheet_analyis = self.read_balance_sheet(statement_file.to_string())?;
-        // balance_sheet_analyis.write_to_file(&format!("{}/analysis/{}", statement_file, "balance_sheet_analysis.txt"))?;
-        // println!("Reading Reports ..");
+        println!("Reading income statement ..");
+        let income_analysis = self.read_income_statements(statement_file.to_string())?;
+        income_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "income_analysis.txt"))?;
+        sleep(Duration::from_secs(30));
+        println!("Reading cash flow statement ..");
+        let cash_flow_analysis = self.read_cash_flow_statement(statement_file.to_string())?;
+        cash_flow_analysis.write_to_file(&format!("{}/analysis/{}", statement_file, "cash_flow_analysis.txt"))?;
+        sleep(Duration::from_secs(30));
+        println!("Reading balance sheet statement ..");
+        let balance_sheet_analyis = self.read_balance_sheet(statement_file.to_string())?;
+        balance_sheet_analyis.write_to_file(&format!("{}/analysis/{}", statement_file, "balance_sheet_analysis.txt"))?;
+        println!("Reading Reports ..");
 
         let reports= std::fs::read_dir(format!("/Users/mmuhammad/Documents/financials/{}/reports", self.ticker))?;
 
